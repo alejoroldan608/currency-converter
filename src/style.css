@@ -75,3 +75,9 @@ button:active { transform: translateY(1px); }
 @media (max-width: 640px) {
   .grid { grid-template-columns: 1fr; }
 }
+
+select {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}

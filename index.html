@@ -15,10 +15,23 @@
     <main class="container card" aria-live="polite">
       <form id="converterForm" class="grid">
         <label for="baseCurrency">Moneda origen</label>
-        <select id="baseCurrency" name="baseCurrency" required></select>
+        <select id="baseCurrency" name="baseCurrency" required>
+          <!-- Opciones de respaldo (JS puede sobrescribirlas, pero ya eres funcional) -->
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="COP">COP</option>
+          <option value="JPY">JPY</option>
+          <option value="GBP">GBP</option>
+        </select>
 
         <label for="targetCurrency">Moneda destino</label>
-        <select id="targetCurrency" name="targetCurrency" required></select>
+        <select id="targetCurrency" name="targetCurrency" required>
+          <option value="COP">COP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="JPY">JPY</option>
+          <option value="GBP">GBP</option>
+        </select>
 
         <label for="amount">Monto</label>
         <input id="amount" name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
@@ -26,17 +39,16 @@
         <button id="convertBtn" type="submit">Convertir</button>
       </form>
 
-      <section id="result" class="result" aria-live="polite">
-        <!-- aquí mostraremos el resultado -->
-      </section>
-
+      <section id="result" class="result" aria-live="polite"></section>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
 
     <footer class="container muted">
-      <small>© Proyecto ADSO Alejandro Roldan</small>
+      <small>Proyecto ADSO Alejandro Roldan</small>
     </footer>
 
+    <!-- type="module" ya carga de forma diferida; lo dejamos al final por seguridad -->
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
+

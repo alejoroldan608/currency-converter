@@ -6,97 +6,143 @@ export type Ok<T> = { ok: true; data: T };
 export type Err = { ok: false; error: string; status?: number };
 export type Result<T> = Ok<T> | Err;
 
-const BASE_URL = 'https://api.exchangerate.host';
-const TIMEOUT_MS = 10_000;
+const BASE_HOST = 'https://api.exchangerate.host';
 const TTL_MS = 30 * 60 * 1000; // 30 min
 
-// Guard: string → CurrencyCode
 function isCurrencyCode(s: string): s is CurrencyCode {
   return (CURRENCY_CODES as readonly string[]).includes(s);
 }
 
-async function withTimeout<T>(p: Promise<T>, ms = TIMEOUT_MS): Promise<T> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    // @ts-expect-error signal type is fine in DOM lib
-    return await p.then((r) => r);
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-/**
- * Trae símbolos soportados y devuelve solo los que estén en nuestro catálogo.
- * Cachea en memoria + localStorage por TTL_MS.
- */
+/* ---------- Símbolos con caché (por si luego lo usas) ---------- */
 export async function getSymbols(): Promise<Result<CurrencyCode[]>> {
   const cacheKey = 'api:symbols';
   const cached = getIfFresh<CurrencyCode[]>(cacheKey);
   if (cached) return { ok: true, data: cached };
 
   try {
-    const url = `${BASE_URL}/symbols`;
-    const res = await withTimeout(fetch(url));
+    const res = await fetch(`${BASE_HOST}/symbols`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-    const json = (await res.json()) as {
-      success?: boolean;
-      symbols?: Record<string, { code: string; description: string }>;
-    };
+    const json = (await res.json()) as { symbols?: Record<string, { code: string }> };
     const all = Object.keys(json.symbols ?? {});
     const filtered = all.filter(isCurrencyCode) as CurrencyCode[];
-    // Fallback por si la API falla o devuelve vacío
     const data = filtered.length ? filtered : CURRENCY_CODES.slice();
     setWithTTL(cacheKey, data, TTL_MS);
     return { ok: true, data };
-  } catch (e) {
-    // Fallback a catálogo local si hay error de red
+  } catch {
     return { ok: true, data: CURRENCY_CODES.slice() };
   }
 }
 
-/**
- * Trae tasas más recientes para una base. Si se pasan symbols[], limita respuesta.
- * Devuelve RateMap parcial o total según symbols.
- */
+/* ---------- Últimas tasas (para fallback) ---------- */
 export async function getLatestRates(
   base: CurrencyCode,
   symbols?: CurrencyCode[],
 ): Promise<Result<RateMap>> {
-  const list = symbols && symbols.length ? symbols : (CURRENCY_CODES as CurrencyCode[]);
+  const list = symbols?.length ? symbols : (CURRENCY_CODES as CurrencyCode[]);
   const key = `api:rates:${base}:${list.join(',')}`;
   const cached = getIfFresh<RateMap>(key);
   if (cached) return { ok: true, data: cached };
 
   const params = new URLSearchParams({ base });
-  if (symbols && symbols.length) params.set('symbols', symbols.join(','));
+  if (symbols?.length) params.set('symbols', symbols.join(','));
 
   try {
-    const url = `${BASE_URL}/latest?${params.toString()}`;
-    const res = await withTimeout(fetch(url));
+    const res = await fetch(`${BASE_HOST}/latest?${params.toString()}`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-
-    const json = (await res.json()) as {
-      success?: boolean;
-      base?: string;
-      rates?: Record<string, number>;
-    };
-
-    const rawRates = json.rates ?? {};
-    // Filtramos y tipamos a nuestro RateMap (solo nuestras CurrencyCode)
-    const typedEntries = Object.entries(rawRates)
-      .filter(([k]) => isCurrencyCode(k))
-      .map(([k, v]) => [k as CurrencyCode, Number(v)] as const);
-
-    // Construimos RateMap con solo las solicitadas. Las que falten no se incluyen.
-    const result = {} as RateMap;
-    for (const [code, rate] of typedEntries) {
-      (result as any)[code] = rate;
+    const json = (await res.json()) as { rates?: Record<string, number> };
+    const out: RateMap = {};
+    for (const [k, v] of Object.entries(json.rates ?? {})) {
+      if (isCurrencyCode(k)) (out as any)[k] = Number(v);
     }
-
-    setWithTTL(key, result, TTL_MS);
-    return { ok: true, data: result };
+    setWithTTL(key, out, TTL_MS);
+    return { ok: true, data: out };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'fetch error' };
   }
+}
+
+/* ---------- Convert directo (host) ---------- */
+export async function convertRemote(
+  from: CurrencyCode,
+  to: CurrencyCode,
+  amount: number,
+): Promise<Result<{ rate: number; result: number }>> {
+  const params = new URLSearchParams({ from, to, amount: String(amount) });
+  try {
+    const res = await fetch(`${BASE_HOST}/convert?${params.toString()}`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
+    const json = (await res.json()) as { info?: { rate?: number }; result?: number };
+
+    const resultRaw = Number(json.result);
+    let rate = Number(json.info?.rate);
+    if (!Number.isFinite(rate) && Number.isFinite(resultRaw) && amount > 0) {
+      rate = resultRaw / amount; // inferir
+    }
+
+    if (!Number.isFinite(rate) || !Number.isFinite(resultRaw) || resultRaw <= 0 || rate <= 0) {
+      return { ok: false, error: 'invalid data' };
+    }
+    return { ok: true, data: { rate, result: resultRaw } };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'fetch error' };
+  }
+}
+
+/* ---------- Convert con fallback múltiple ---------- */
+export async function convertAmount(
+  from: CurrencyCode,
+  to: CurrencyCode,
+  amount: number,
+): Promise<Result<{ rate: number; value: number; source: string }>> {
+  // 1) /convert (exchangerate.host)
+  const r1 = await convertRemote(from, to, amount);
+  if (r1.ok) {
+    const { rate, result } = r1.data;
+    if (Number.isFinite(rate) && rate > 0 && Number.isFinite(result) && result > 0) {
+      return { ok: true, data: { rate, value: result, source: 'host-convert' } };
+    }
+  }
+
+  // 2) /latest (exchangerate.host)
+  const r2 = await getLatestRates(from, [to]);
+  if (r2.ok) {
+    const rate = Number((r2.data as any)[to]);
+    if (Number.isFinite(rate) && rate > 0) {
+      return { ok: true, data: { rate, value: amount * rate, source: 'host-latest' } };
+    }
+  }
+
+  // 3) open.er-api.com (sin API key, CORS OK)
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
+    if (res.ok) {
+      const json = (await res.json()) as { result?: string; rates?: Record<string, number> };
+      const rate = Number(json.rates?.[to]);
+      if (Number.isFinite(rate) && rate > 0) {
+        return { ok: true, data: { rate, value: amount * rate, source: 'erapi-latest' } };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 4) Fallback local (estimado) — solo para no dejar en 0 si todo falla
+  const FALLBACK: Record<string, number> = {
+    'USD->COP': 4000,
+    'EUR->COP': 4400,
+    'USD->EUR': 0.9,
+    'EUR->USD': 1.1,
+    'USD->MXN': 17,
+    'USD->BRL': 5,
+    'USD->CLP': 900,
+    'USD->JPY': 155,
+    'USD->GBP': 0.78,
+  };
+  const key = `${from}->${to}`;
+  if (FALLBACK[key]) {
+    const rate = FALLBACK[key];
+    return { ok: true, data: { rate, value: amount * rate, source: 'fallback-local' } };
+  }
+
+  return { ok: false, error: 'no-rate-found' };
 }

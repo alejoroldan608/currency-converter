@@ -1,16 +1,16 @@
 // src/app/types.ts
 
-// Catálogo base (puedes ampliar luego)
+// Catálogo base
 export const CURRENCY_CODES = [
   'USD', 'EUR', 'COP', 'JPY', 'GBP',
   'MXN', 'BRL', 'ARS', 'CLP',
   'CAD', 'AUD', 'CHF',
 ] as const;
 
-export type CurrencyCode = typeof CURRENCY_CODES[number];
+export type CurrencyCode = (typeof CURRENCY_CODES)[number];
 
-// Mapa de tasas relativo a una base (ej: base = USD → rates.EUR = 0.91)
-export type RateMap = Record<CurrencyCode, number>;
+// Nota: la API puede devolver tasas parciales
+export type RateMap = Partial<Record<CurrencyCode, number>>;
 
 export interface ConversionRequest {
   base: CurrencyCode;
@@ -21,12 +21,12 @@ export interface ConversionRequest {
 export interface ConversionQuote {
   base: CurrencyCode;
   target: CurrencyCode;
-  rate: number;     // cuántos TARGET por 1 BASE
+  rate: number;      // cuántos TARGET por 1 BASE
   timestamp: number; // epoch ms
 }
 
 export interface ConversionResult {
   request: ConversionRequest;
   quote: ConversionQuote;
-  value: number; // amount * rate (sin formato, valor numérico)
+  value: number; // amount * rate (numérico)
 }
