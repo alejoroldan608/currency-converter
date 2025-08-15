@@ -1,6 +1,8 @@
 import { CURRENCY_CODES, type CurrencyCode } from './app/types';
 import { convertAmount } from './app/api';
 import { formatMoney, DomainError } from './app/domain';
+import './styles.css';
+
 
 // --------------------------- DOM ---------------------------
 const baseSelect = document.getElementById('baseCurrency') as HTMLSelectElement | null;
