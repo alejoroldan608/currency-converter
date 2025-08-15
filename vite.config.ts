@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  test: {
-    environment: 'jsdom',
-    globals: true,
-  },
+  // sustituye 'currency-converter' por el nombre exacto de tu repo
+  base: '/currency-converter/',
+  test: { environment: 'jsdom', globals: true },
 });

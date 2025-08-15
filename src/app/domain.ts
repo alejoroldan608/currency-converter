@@ -7,13 +7,13 @@ import type {
   RateMap,
 } from './types';
 
+// ❌ Evitar "parameter properties" por 'erasableSyntaxOnly'
 export class DomainError extends Error {
-  constructor(
-    public code: 'INVALID_AMOUNT' | 'INVALID_RATE' | 'MISSING_RATE' | 'SAME_CURRENCY',
-    detail?: string,
-  ) {
+  code: 'INVALID_AMOUNT' | 'INVALID_RATE' | 'MISSING_RATE' | 'SAME_CURRENCY';
+  constructor(code: 'INVALID_AMOUNT' | 'INVALID_RATE' | 'MISSING_RATE' | 'SAME_CURRENCY', detail?: string) {
     super(`[${code}] ${detail ?? code}`);
     this.name = 'DomainError';
+    this.code = code;
   }
 }
 
@@ -53,7 +53,7 @@ export function makeConversion(
   rate: number,
   now: number = Date.now(),
   opts?: { decimals?: number },
-) {
+): ConversionResult { // ✅ usamos ConversionResult para evitar TS6196
   if (req.base === req.target) {
     throw new DomainError('SAME_CURRENCY', 'Base y destino no pueden ser iguales');
   }

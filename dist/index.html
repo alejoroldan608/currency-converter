@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conversor de Monedas</title>
+    <script type="module" crossorigin src="/currency-converter/assets/index-BUVv4szO.js"></script>
+    <link rel="stylesheet" crossorigin href="/currency-converter/assets/index-CJAg_m2k.css">
+  </head>
+  <body>
+    <header class="container">
+      <h1>Conversor de Monedas</h1>
+      <p class="subtitle">Conversor de Monedas / Proyecto final / HTML, CSS styles y TypeScript</p>
+    </header>
+
+    <main class="container card" aria-live="polite">
+      <form id="converterForm" class="grid">
+        <label for="baseCurrency">Moneda origen</label>
+        <select id="baseCurrency" name="baseCurrency" required>
+          <!-- Opciones de respaldo (JS puede sobrescribirlas, pero ya eres funcional) -->
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="COP">COP</option>
+          <option value="JPY">JPY</option>
+          <option value="GBP">GBP</option>
+        </select>
+
+        <label for="targetCurrency">Moneda destino</label>
+        <select id="targetCurrency" name="targetCurrency" required>
+          <option value="COP">COP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="JPY">JPY</option>
+          <option value="GBP">GBP</option>
+        </select>
+
+        <label for="amount">Monto</label>
+        <input id="amount" name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
+
+        <button id="convertBtn" type="submit">Convertir</button>
+      </form>
+
+      <section id="result" class="result" aria-live="polite"></section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <footer class="container muted">
+      <small>Proyecto Final ADSO Alejandro Roldan</small>
+    </footer>
+
+    <!-- type="module" ya carga de forma diferida; lo dejamos al final por seguridad -->
+  </body>
+</html>
+

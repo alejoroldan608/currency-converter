@@ -13,7 +13,7 @@ function isCurrencyCode(s: string): s is CurrencyCode {
   return (CURRENCY_CODES as readonly string[]).includes(s);
 }
 
-/* ---------- Símbolos con caché (por si luego lo usas) ---------- */
+/* ---------- Símbolos con caché ---------- */
 export async function getSymbols(): Promise<Result<CurrencyCode[]>> {
   const cacheKey = 'api:symbols';
   const cached = getIfFresh<CurrencyCode[]>(cacheKey);
@@ -33,13 +33,15 @@ export async function getSymbols(): Promise<Result<CurrencyCode[]>> {
   }
 }
 
-/* ---------- Últimas tasas (para fallback) ---------- */
+/* ---------- Últimas tasas con caché ---------- */
 export async function getLatestRates(
   base: CurrencyCode,
   symbols?: CurrencyCode[],
 ): Promise<Result<RateMap>> {
-  const list = symbols?.length ? symbols : (CURRENCY_CODES as CurrencyCode[]);
+  // 👇 Usa un tipo readonly para evitar el error de conversión
+  const list: readonly CurrencyCode[] = symbols?.length ? symbols : CURRENCY_CODES;
   const key = `api:rates:${base}:${list.join(',')}`;
+
   const cached = getIfFresh<RateMap>(key);
   if (cached) return { ok: true, data: cached };
 
@@ -50,6 +52,7 @@ export async function getLatestRates(
     const res = await fetch(`${BASE_HOST}/latest?${params.toString()}`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
     const json = (await res.json()) as { rates?: Record<string, number> };
+
     const out: RateMap = {};
     for (const [k, v] of Object.entries(json.rates ?? {})) {
       if (isCurrencyCode(k)) (out as any)[k] = Number(v);
@@ -61,7 +64,7 @@ export async function getLatestRates(
   }
 }
 
-/* ---------- Convert directo (host) ---------- */
+/* ---------- Convert directo ---------- */
 export async function convertRemote(
   from: CurrencyCode,
   to: CurrencyCode,
@@ -71,15 +74,17 @@ export async function convertRemote(
   try {
     const res = await fetch(`${BASE_HOST}/convert?${params.toString()}`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-    const json = (await res.json()) as { info?: { rate?: number }; result?: number };
 
+    const json = (await res.json()) as { info?: { rate?: number }; result?: number };
     const resultRaw = Number(json.result);
     let rate = Number(json.info?.rate);
+
+    // Fallback: si no vino rate pero sí result
     if (!Number.isFinite(rate) && Number.isFinite(resultRaw) && amount > 0) {
-      rate = resultRaw / amount; // inferir
+      rate = resultRaw / amount;
     }
 
-    if (!Number.isFinite(rate) || !Number.isFinite(resultRaw) || resultRaw <= 0 || rate <= 0) {
+    if (!Number.isFinite(rate) || !Number.isFinite(resultRaw) || rate <= 0 || resultRaw <= 0) {
       return { ok: false, error: 'invalid data' };
     }
     return { ok: true, data: { rate, result: resultRaw } };
@@ -88,22 +93,15 @@ export async function convertRemote(
   }
 }
 
-/* ---------- Convert con fallback múltiple ---------- */
+/* ---------- Convert con fallbacks ---------- */
 export async function convertAmount(
   from: CurrencyCode,
   to: CurrencyCode,
   amount: number,
 ): Promise<Result<{ rate: number; value: number; source: string }>> {
-  // 1) /convert (exchangerate.host)
   const r1 = await convertRemote(from, to, amount);
-  if (r1.ok) {
-    const { rate, result } = r1.data;
-    if (Number.isFinite(rate) && rate > 0 && Number.isFinite(result) && result > 0) {
-      return { ok: true, data: { rate, value: result, source: 'host-convert' } };
-    }
-  }
+  if (r1.ok) return { ok: true, data: { rate: r1.data.rate, value: r1.data.result, source: 'host-convert' } };
 
-  // 2) /latest (exchangerate.host)
   const r2 = await getLatestRates(from, [to]);
   if (r2.ok) {
     const rate = Number((r2.data as any)[to]);
@@ -112,31 +110,20 @@ export async function convertAmount(
     }
   }
 
-  // 3) open.er-api.com (sin API key, CORS OK)
   try {
     const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
     if (res.ok) {
-      const json = (await res.json()) as { result?: string; rates?: Record<string, number> };
+      const json = (await res.json()) as { rates?: Record<string, number> };
       const rate = Number(json.rates?.[to]);
       if (Number.isFinite(rate) && rate > 0) {
         return { ok: true, data: { rate, value: amount * rate, source: 'erapi-latest' } };
       }
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
-  // 4) Fallback local (estimado) — solo para no dejar en 0 si todo falla
   const FALLBACK: Record<string, number> = {
-    'USD->COP': 4000,
-    'EUR->COP': 4400,
-    'USD->EUR': 0.9,
-    'EUR->USD': 1.1,
-    'USD->MXN': 17,
-    'USD->BRL': 5,
-    'USD->CLP': 900,
-    'USD->JPY': 155,
-    'USD->GBP': 0.78,
+    'USD->COP': 4000, 'EUR->COP': 4400, 'USD->EUR': 0.9, 'EUR->USD': 1.1,
+    'USD->MXN': 17, 'USD->BRL': 5, 'USD->CLP': 900, 'USD->JPY': 155, 'USD->GBP': 0.78,
   };
   const key = `${from}->${to}`;
   if (FALLBACK[key]) {
