@@ -25,15 +25,15 @@ const $form = assertDom(form, 'converterForm');
 const $result = assertDom(resultBox, 'result');
 const $status = assertDom(statusText, 'status');
 
-// Monedas iniciales mínimas (luego las poblará la API)
-const DEFAULT_SYMBOLS = ['USD', 'EUR', 'COP', 'JPY', 'GBP'] as const;
+// src/main.ts (reemplaza el DEFAULT_SYMBOLS por import desde types)
+import { CURRENCY_CODES } from './app/types';
 
-// Rellena selects con opciones básicas (placeholder)
+// ...
+// Elimina DEFAULT_SYMBOLS y usa CURRENCY_CODES:
 function populateSelects(symbols: readonly string[]) {
   const toOption = (code: string) => `<option value="${code}">${code}</option>`;
   $base.innerHTML = symbols.map(toOption).join('');
   $target.innerHTML = symbols.map(toOption).join('');
-  // Valores por defecto iniciales
   $base.value = 'USD';
   $target.value = 'COP';
 }
@@ -62,6 +62,8 @@ $form.addEventListener('submit', (ev) => {
   setResult(`Convertir ${amount} ${$base.value} → ${$target.value}`);
 });
 
-// Inicialización de la UI
-populateSelects(DEFAULT_SYMBOLS);
+
+// Inicialización
+populateSelects(CURRENCY_CODES);
+
 setStatus('Selecciona monedas e ingresa el monto para convertir.');
