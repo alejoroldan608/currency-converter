@@ -3,11 +3,16 @@ import { ConversionRequest, ConversionResult, ConversionQuote, CurrencyCode, Rat
 
 // Errores tipados para facilitar debugging / tests
 export class DomainError extends Error {
-  constructor(public code: 'INVALID_AMOUNT' | 'INVALID_RATE' | 'MISSING_RATE' | 'SAME_CURRENCY', message?: string) {
-    super(message ?? code);
+  constructor(
+    public code: 'INVALID_AMOUNT' | 'INVALID_RATE' | 'MISSING_RATE' | 'SAME_CURRENCY',
+    detail?: string
+  ) {
+    // Incluimos el código en el mensaje para que los tests por regex coincidan
+    super(`[${code}] ${detail ?? code}`);
     this.name = 'DomainError';
   }
 }
+
 
 // Utilidad: redondeo bancario simple para presentación/consistencia en pruebas.
 // Nota: el cálculo interno puede trabajar con más precisión si lo necesitas.
